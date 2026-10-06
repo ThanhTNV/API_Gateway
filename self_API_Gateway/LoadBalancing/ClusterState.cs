@@ -60,12 +60,22 @@ public sealed class ClusterRegistry
 {
     private readonly Dictionary<string, ClusterState> _clusters = [];
 
-    public ClusterRegistry(GatewayOptions options)
+    // Pass the registry being replaced to carry health state over for destinations that stay.
+    public ClusterRegistry(GatewayOptions options, ClusterRegistry? previous = null)
     {
         foreach (var (id, config) in options.Clusters)
         {
-            if (config.Destinations.Count == 0)
-                throw new InvalidOperationException($"Cluster '{id}' has no destinations.");
+            if (config?.Destinations is null or { Count: 0 })
+                throw new GatewayConfigException($"Cluster '{id}' has no destinations.");
+            if (config.HealthCheck is { } healthCheck && healthCheck.Path?.StartsWith('/') != true)
+                throw new GatewayConfigException($"Cluster '{id}': HealthCheck.Path must start with '/'.");
+
+            // Without a health check nothing would revive an unhealthy destination, so those start fresh.
+            ClusterState? previousCluster = null;
+            if (config.HealthCheck is not null)
+            {
+                previous?.TryGet(id, out previousCluster);
+            }
 
             var destinations = new DestinationState[config.Destinations.Count];
             for (var i = 0; i < destinations.Length; i++)
@@ -74,10 +84,10 @@ public sealed class ClusterRegistry
                 if (!Uri.TryCreate(address, UriKind.Absolute, out var uri) ||
                     (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
                 {
-                    throw new InvalidOperationException(
+                    throw new GatewayConfigException(
                         $"Cluster '{id}' has an invalid destination '{address}'. Expected an absolute http(s) URL.");
                 }
-                destinations[i] = new DestinationState(uri);
+                destinations[i] = previousCluster?.Destinations.FirstOrDefault(d => d.Address == uri) ?? new DestinationState(uri);
             }
 
             _clusters[id] = new ClusterState(id, destinations, LoadBalancerFactory.Create(config.LoadBalancing), config.HealthCheck);

@@ -1,6 +1,7 @@
 **/bin/
 **/obj/
 **/logs/
+**/.conf_change
 **/.vs/
 **/.vscode/
 **/*.user

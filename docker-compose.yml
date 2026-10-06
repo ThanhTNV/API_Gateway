@@ -6,8 +6,13 @@ services:
     build: ./self_API_Gateway
     ports:
       - "${GATEWAY_PORT:-8080}:8080"
+    environment:
+      # Enables GET/PUT /admin/config (sent as the X-Admin-Key header). Left empty, the admin API is off.
+      Admin__ApiKey: ${GATEWAY_ADMIN_KEY:-}
     volumes:
       - gateway-logs:/app/logs
+      # Holds .conf_change, so configuration changes survive the container.
+      - gateway-data:/app/data
     depends_on:
       - todo-1
       - todo-2
@@ -25,3 +30,4 @@ services:
 
 volumes:
   gateway-logs:
+  gateway-data:

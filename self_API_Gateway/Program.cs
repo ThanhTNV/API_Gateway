@@ -1,6 +1,5 @@
-using self_API_Gateway.Configuration;
+using self_API_Gateway.Admin;
 using self_API_Gateway.Health;
-using self_API_Gateway.LoadBalancing;
 using self_API_Gateway.Logging;
 using self_API_Gateway.Proxy;
 using self_API_Gateway.RateLimiting;
@@ -13,15 +12,13 @@ builder.Logging.AddDailyFile(Path.Combine(
     builder.Environment.ContentRootPath,
     builder.Configuration["Logging:File:Directory"] ?? "logs"));
 
-var gateway =builder.Configuration.GetSection(GatewayOptions.SectionName).Get<GatewayOptions>() ?? new GatewayOptions();
-
-builder.Services.AddSingleton(gateway);
-builder.Services.AddSingleton<ClusterRegistry>();
 builder.Services.AddSingleton(_ => HttpForwarder.CreateInvoker());
 builder.Services.AddSingleton<HttpForwarder>();
+// Loads the Gateway configuration (the change log if present, appsettings.json otherwise) and owns it from then on.
+builder.Services.AddSingleton<GatewayRuntime>();
 builder.Services.AddHostedService<HealthCheckService>();
-builder.Services.AddGatewayRateLimiting(gateway);
-builder.Services.AddGatewayForwardedHeaders(gateway);
+builder.Services.AddGatewayRateLimiting();
+builder.Services.AddGatewayForwardedHeaders();
 
 var app = builder.Build();
 
@@ -29,6 +26,7 @@ var app = builder.Build();
 app.UseForwardedHeaders();
 app.UseRateLimiter();
 
-app.MapGatewayRoutes(gateway);
+app.MapGateway();
+app.MapGatewayAdmin();
 
 app.Run();

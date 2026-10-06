@@ -28,15 +28,18 @@ RUN --mount=type=cache,id=nuget,target=/root/.nuget/packages \
       --no-restore \
       -o /app/publish \
  && rm -f /app/publish/*.dbg \
- && mkdir /app/logs
+ && mkdir /app/logs /app/data
 
 # ============ Runtime stage ============
 FROM mcr.microsoft.com/dotnet/runtime-deps:${DOTNET_VERSION}-noble-chiseled AS final
 WORKDIR /app
 COPY --from=build /app/publish .
-# The chiseled image has no shell and runs as non-root: bring in a log directory the app user can write to.
+# The chiseled image has no shell and runs as non-root: bring in directories the app user can write to.
 COPY --from=build --chown=$APP_UID:$APP_UID /app/logs ./logs
+COPY --from=build --chown=$APP_UID:$APP_UID /app/data ./data
 ENV ASPNETCORE_HTTP_PORTS=8080
+# Configuration change log; mount a volume at /app/data to keep admin changes across containers.
+ENV Admin__ChangeLogPath=data/.conf_change
 EXPOSE 8080
 USER $APP_UID
 ENTRYPOINT ["./self_API_Gateway"]

@@ -9,3 +9,34 @@ GET {{self_API_Gateway_HostAddress}}/api/todos/1
 Accept: application/json
 
 ###
+
+# Admin API: needs Admin:ApiKey to be set on the gateway.
+@adminKey = change-me
+
+GET {{self_API_Gateway_HostAddress}}/admin/config
+X-Admin-Key: {{adminKey}}
+
+###
+
+# Replaces the whole Gateway configuration.
+PUT {{self_API_Gateway_HostAddress}}/admin/config
+X-Admin-Key: {{adminKey}}
+Content-Type: application/json
+
+{
+  "Routes": [
+    { "Id": "todos", "PathPrefix": "/api/todos", "ClusterId": "todo-cluster", "RateLimitPolicy": "per-ip" }
+  ],
+  "RateLimitPolicies": {
+    "per-ip": { "Algorithm": "TokenBucket", "PartitionBy": "Ip", "PermitLimit": 100, "TokensPerPeriod": 50, "WindowSeconds": 1 }
+  },
+  "Clusters": {
+    "todo-cluster": {
+      "LoadBalancing": "RoundRobin",
+      "HealthCheck": { "Path": "/health", "IntervalSeconds": 10 },
+      "Destinations": [ "http://todo-1:8080", "http://todo-2:8080" ]
+    }
+  }
+}
+
+###

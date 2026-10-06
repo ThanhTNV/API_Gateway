@@ -6,6 +6,9 @@
 # dotenv files
 .env
 
+# API gateway configuration change log (runtime state)
+.conf_change
+
 # User-specific files
 *.rsuser
 *.suo

@@ -65,7 +65,7 @@ public static class LoadBalancerFactory
         "leastrequests" => new LeastRequestsLoadBalancer(),
         null or "" or "poweroftwochoices" => new PowerOfTwoChoicesLoadBalancer(),
         "random" => new RandomLoadBalancer(),
-        _ => throw new InvalidOperationException(
+        _ => throw new Configuration.GatewayConfigException(
             $"Unknown load balancing strategy '{strategy}'. Expected RoundRobin, LeastRequests, PowerOfTwoChoices or Random.")
     };
 }
