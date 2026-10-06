@@ -1,0 +1,11 @@
+@self_API_Gateway_HostAddress = http://localhost:5180
+
+GET {{self_API_Gateway_HostAddress}}/api/todos/
+Accept: application/json
+
+###
+
+GET {{self_API_Gateway_HostAddress}}/api/todos/1
+Accept: application/json
+
+###

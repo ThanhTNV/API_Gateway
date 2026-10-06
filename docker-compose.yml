@@ -1,0 +1,27 @@
+# Gateway in front of a two-instance todo cluster.
+#   docker compose up --build
+#   http://localhost:8080/api/todos   http://localhost:8080/api/todos/1
+services:
+  gateway:
+    build: ./self_API_Gateway
+    ports:
+      - "${GATEWAY_PORT:-8080}:8080"
+    volumes:
+      - gateway-logs:/app/logs
+    depends_on:
+      - todo-1
+      - todo-2
+
+  # Service names match the destinations in the gateway's appsettings.json (http://todo-1:8080, http://todo-2:8080).
+  todo-1:
+    build: ./todo_API
+    image: todo-api
+    hostname: todo-1
+
+  todo-2:
+    build: ./todo_API
+    image: todo-api
+    hostname: todo-2
+
+volumes:
+  gateway-logs:

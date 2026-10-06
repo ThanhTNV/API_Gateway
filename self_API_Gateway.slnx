@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="self_API_Gateway/self_API_Gateway.csproj" />
+  <Project Path="todo_API/todo_API.csproj" />
+</Solution>
