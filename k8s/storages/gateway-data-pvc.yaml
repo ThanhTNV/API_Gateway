@@ -3,6 +3,7 @@ kind: PersistentVolumeClaim
 metadata:
   name: gateway-data
 spec:
+  storageClassName: do-block-storage
   accessModes:
     - ReadWriteOnce
   resources:

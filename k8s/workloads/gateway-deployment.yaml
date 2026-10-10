@@ -17,7 +17,8 @@ spec:
     spec:
       containers:
         - name: gateway
-          image: todo-gateway:dev
+          # image: todo-gateway:dev
+          image: registry.digitalocean.com/todo-cluster-registry/todo-gateway:v1
           imagePullPolicy: IfNotPresent
           resources:
             requests:

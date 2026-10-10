@@ -2,9 +2,19 @@ apiVersion: v1
 kind: Service
 metadata:
   name: gateway
+  annotations:
+    # This annotation is required for the DigitalOcean Load Balancer to work with the service.
+    # It tells the load balancer to use the "http" protocol for health checks.
+    service.beta.kubernetes.io/do-loadbalancer-type: "REGIONAL"
+    service.beta.kubernetes.io/do-loadbalancer-protocol: "http"
 spec:
+  # By default, the service type is ClusterIP, which means it is only accessible within the cluster.
+  # You can change it to NodePort or LoadBalancer if you want to expose it outside the cluster.
+  # type: ClusterIP
+  type: LoadBalancer
   selector:
     app: gateway
   ports:
-    - port: 8080
+    - name: http
+      port: 80
       targetPort: 8080

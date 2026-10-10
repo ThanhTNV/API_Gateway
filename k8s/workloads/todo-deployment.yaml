@@ -14,7 +14,8 @@ spec:
     spec:
       containers:
         - name: todo
-          image: todo-api:dev
+          # image: todo-api:dev
+          image: registry.digitalocean.com/todo-cluster-registry/todo-api:v1
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080

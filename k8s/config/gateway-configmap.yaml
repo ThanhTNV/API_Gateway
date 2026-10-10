@@ -17,3 +17,11 @@ data:
   Gateway__RateLimitPolicies__per-ip__TokensPerPeriod: "50"
   Gateway__RateLimitPolicies__per-ip__WindowSeconds: "1"
   Gateway__RateLimitPolicies__per-ip__QueueLimit: "0"
+  # Behind a cloud load balancer/proxy, trust the verified upstream network so
+  # Forwarded Headers Middleware can restore the client IP from X-Forwarded-For
+  # before per-IP rate limiting. The load balancer must send this header.
+  # Obtain the trusted range from your cloud/network configuration and verify
+  # it matches the gateway's incoming peer addresses; it is deployment-specific.
+  # Here, IPv4 network 10.104.0.0/20 is represented as IPv4-mapped IPv6 /116.
+  # Only trust this range when gateway access is restricted to the proxy path.
+  Gateway__KnownNetworks__0: "::ffff:10.104.0.0/116"
