@@ -28,6 +28,9 @@ spec:
               memory: 256Mi
           ports:
             - containerPort: 8080
+          envFrom:
+          - configMapRef:
+              name: gateway-config
           env:
             - name: Admin__ApiKey
               valueFrom:

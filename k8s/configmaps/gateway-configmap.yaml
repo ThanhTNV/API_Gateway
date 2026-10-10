@@ -7,7 +7,7 @@ data:
   Gateway__Clusters__todo-cluster__HealthCheck__Path: /health
   Gateway__Clusters__todo-cluster__HealthCheck__IntervalSeconds: "10"
   Gateway__Clusters__todo-cluster__HealthCheck__TimeoutSeconds: "2"
-  Gateway__Routes__0__RouteId: todo-route
+  Gateway__Routes__0__Id: todo-route
   Gateway__Routes__0__ClusterId: todo-cluster
   Gateway__Routes__0__PathPrefix: /api/todos
   Gateway__Routes__0__RateLimitPolicy: per-ip

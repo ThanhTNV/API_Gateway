@@ -7,7 +7,7 @@
     .\test-rate-limit.ps1 -BaseUrl http://localhost:8080/api/todos -Id 3 -Requests 500
 #>
 param(
-    [string]$BaseUrl = 'http://localhost:8080/todos',
+    [string]$BaseUrl = 'http://localhost:8080/api/todos',
     [string]$Id = '1',
     # Must be well above the policy's burst size (PermitLimit, 100 by default) to trigger 429s.
     [int]$Requests = 300

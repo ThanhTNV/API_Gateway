@@ -14,19 +14,13 @@ services:
       # Holds .conf_change, so configuration changes survive the container.
       - gateway-data:/app/data
     depends_on:
-      - todo-1
-      - todo-2
+      - todo
 
-  # Service names match the destinations in the gateway's appsettings.json (http://todo-1:8080, http://todo-2:8080).
-  todo-1:
+  # Service names match the destinations in the gateway's appsettings.json (http://todo:8080).
+  todo:
     build: ./todo_API
     image: todo-api
-    hostname: todo-1
-
-  todo-2:
-    build: ./todo_API
-    image: todo-api
-    hostname: todo-2
+    hostname: todo
 
 volumes:
   gateway-logs:
