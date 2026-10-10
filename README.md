@@ -41,76 +41,311 @@ The gateway strips the configured route prefix before forwarding: `/api/todos` r
 | [Admin/AdminEndpoints.cs](self_API_Gateway/Admin/AdminEndpoints.cs) | Authenticated GET/PUT configuration endpoints |
 | [Configuration/ConfigChangeLog.cs](self_API_Gateway/Configuration/ConfigChangeLog.cs) | Persisted change records and strict source-generated JSON serialization |
 
-## Run with Docker Compose
+## Choose your deployment environment
 
-From the repository root:
+Run commands from the repository root in PowerShell. The checked-in Kubernetes manifests target DigitalOcean. Docker Compose does not read any files under `k8s/`.
 
-```bash
-docker compose up --build
+| File | Docker Compose | Minikube | DigitalOcean Kubernetes |
+| --- | --- | --- | --- |
+| `docker-compose.yml` | Used: builds gateway and todo locally | Not used | Not used |
+| `self_API_Gateway/appsettings.json` | Backend `http://todo:8080`; empty proxy trust lists for direct local access | Same backend; ConfigMap overrides matching settings | Same backend; ConfigMap provides cloud settings |
+| `k8s/workloads/todo-deployment.yaml` | Not used | Image `todo-api:dev` | Registry image with a release tag |
+| `k8s/workloads/gateway-deployment.yaml` | Not used | Image `todo-gateway:dev` | Registry image with a release tag |
+| `k8s/networkings/gateway-service.yaml` | Not used | `ClusterIP`; no cloud annotations; port 80 -> 8080 | `LoadBalancer`; DigitalOcean HTTP annotations; port 80 -> 8080 |
+| `k8s/networkings/todo-service.yaml` | Not used | Keep `ClusterIP`, port 8080 | Keep `ClusterIP`, port 8080 |
+| `k8s/storages/gateway-data-pvc.yaml` and `gateway-logs-pvc.yaml` | Not used: Compose named volumes | Omit cloud StorageClass to use Minikube default | `storageClassName: do-block-storage` |
+| `k8s/config/gateway-configmap.yaml` | Not used | Remove cloud `Gateway__KnownNetworks__0` override | Set verified trusted upstream network for this cluster |
+| `k8s/config/gateway-secret.yaml` | Not used: `GATEWAY_ADMIN_KEY` supplies the key | Optional Secret template; name `gateway-admin`, key `api-key` | Same; keep real credentials out of Git |
+| `test-rate-limit.ps1` | Pass localhost URL | Pass localhost port-forward URL | Pass gateway external URL |
+
+The commands below apply the ConfigMap, workloads, networking, and storage separately from the Secret. This avoids overwriting an existing admin key by applying a checked-in Secret template. All resources use the `default` namespace in these examples.
+
+Saved `/app/data/.conf_change` admin configuration takes precedence over appsettings and ConfigMap settings. If a setting appears unchanged, inspect the live admin configuration before assuming the deployment failed. Do not delete persistent data to switch environments.
+
+## Local option 1: Docker Compose
+
+### 1. Check the files
+
+In `self_API_Gateway/appsettings.json`, keep:
+
+```json
+"Destination": "http://todo:8080"
 ```
 
-Compose starts the gateway on port 8080 and one backend named `todo`, matching `http://todo:8080` in the gateway configuration.
+For direct local access, keep `Gateway.KnownProxies` and `Gateway.KnownNetworks` empty unless you intentionally put another trusted proxy in front of the gateway. The Compose backend service is named `todo`. No Kubernetes manifest changes are needed for this option.
 
-```bash
-curl http://localhost:8080/api/todos
-curl http://localhost:8080/api/todos/1
+### 2. Start and test
+
+Start Docker Desktop with Linux containers, then run:
+
+```powershell
+docker compose up --build -d
+docker compose ps
+curl.exe http://localhost:8080/api/todos
+.\test-rate-limit.ps1 -BaseUrl http://localhost:8080/api/todos -Requests 300
 ```
 
-Set `GATEWAY_PORT` to override the published gateway port.
+Optional environment settings, set before starting Compose:
 
-## Run with Kubernetes
-
-The manifests are categorized as follows:
-
-```text
-k8s/
-├── configmaps/
-│   └── gateway-configmap.yaml
-├── networkings/
-│   ├── gateway-service.yaml
-│   └── todo-service.yaml
-├── storages/
-│   ├── gateway-data-pvc.yaml
-│   └── gateway-logs-pvc.yaml
-└── workloads/
-    ├── gateway-deployment.yaml
-    └── todo-deployment.yaml
+```powershell
+$env:GATEWAY_PORT = '8080'
+$env:GATEWAY_ADMIN_KEY = 'replace-with-a-long-random-secret'
 ```
 
-Build the images used by the Deployments:
+Without a non-empty admin key, the admin API is disabled. To inspect logs or stop containers:
 
-```bash
+```powershell
+docker compose logs --tail=100 gateway
+docker compose down
+```
+
+`down` without `--volumes` preserves named volumes. Re-run `docker compose up --build -d` after application or appsettings changes.
+
+## Local option 2: Minikube
+
+### 1. Start and select the local cluster
+
+```powershell
+minikube start
+kubectl config use-context minikube
+kubectl config current-context
+kubectl get storageclass
+```
+
+Confirm the context is Minikube before applying resources.
+
+### 2. Change the Kubernetes files for local use
+
+In `k8s/workloads/todo-deployment.yaml`, set the container fields:
+
+```yaml
+image: todo-api:dev
+imagePullPolicy: IfNotPresent
+```
+
+In `k8s/workloads/gateway-deployment.yaml`:
+
+```yaml
+image: todo-gateway:dev
+imagePullPolicy: IfNotPresent
+```
+
+Keep gateway `envFrom.configMapRef.name: gateway-config`, the `gateway-admin` Secret reference, and existing volume mounts.
+
+Replace `k8s/networkings/gateway-service.yaml` with:
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway
+spec:
+  type: ClusterIP
+  selector:
+    app: gateway
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+```
+
+In both `k8s/storages/gateway-data-pvc.yaml` and `gateway-logs-pvc.yaml`, remove `storageClassName: do-block-storage`. Keep the existing claim name, `ReadWriteOnce`, and `1Gi` request. Omitting the field uses the cluster's default StorageClass; check one exists with `kubectl get storageclass`.
+
+In `k8s/config/gateway-configmap.yaml`, keep destination `http://todo:8080`, the route, and rate-limit settings. Remove `Gateway__KnownNetworks__0: "::ffff:10.104.0.0/116"` for direct port-forward access. It belongs to the cloud environment. Keep `k8s/networkings/todo-service.yaml` unchanged.
+
+StorageClass changes apply to new claims. Existing bound PVCs generally cannot change StorageClass in place: preserve their data and plan a migration if you already created claims with different storage settings.
+
+### 3. Build, load, and deploy
+
+```powershell
 docker build -t todo-api:dev ./todo_API
 docker build -t todo-gateway:dev ./self_API_Gateway
+minikube image load todo-api:dev
+minikube image load todo-gateway:dev
 ```
 
-Load these images into your local cluster using its image-loading mechanism. For a remote cluster, push them to a registry and update the Deployment image references. The PVCs require a default StorageClass capable of provisioning storage, or matching pre-provisioned volumes.
+On the first deployment, create the required Secret (skip if it already exists):
 
-Create the required admin Secret. An empty key keeps the admin API disabled:
-
-```bash
+```powershell
 kubectl create secret generic gateway-admin --from-literal=api-key=""
-kubectl apply -f k8s/ --recursive
-kubectl rollout status deployment/todo
-kubectl rollout status deployment/gateway
-kubectl port-forward service/gateway 8080:8080
 ```
 
-Create the Secret and resources in the same namespace. If the Secret already exists, reuse it or update it rather than running create again. To enable the admin API, supply a non-empty key securely.
+Then apply:
 
-Keep port forwarding running and use the same localhost URLs as the Compose example.
+```powershell
+kubectl apply -f k8s/config/gateway-configmap.yaml -f k8s/workloads/ -f k8s/networkings/ -f k8s/storages/
+kubectl rollout status deployment/todo --timeout=300s
+kubectl rollout status deployment/gateway --timeout=300s
+kubectl get pods,services,pvc
+kubectl port-forward service/gateway 8080:80
+```
 
-The todo Deployment has two replicas. Both Deployments specify CPU/memory requests of 100m/128Mi and limits of 200m/256Mi per container. The gateway runs one replica with the Recreate strategy and persistent logs/data volumes.
+Keep port forwarding running. In another terminal:
 
-The gateway Deployment loads `gateway-config` through `envFrom`. Its route identifier key is `Gateway__Routes__0__Id`. ConfigMap values override matching appsettings values at startup; they do not replace the entire configuration object. After changing ConfigMap environment values, apply them and restart the gateway:
+```powershell
+curl.exe http://localhost:8080/api/todos
+.\test-rate-limit.ps1 -BaseUrl http://localhost:8080/api/todos -Requests 300
+```
 
-```bash
-kubectl apply -f k8s/configmaps/gateway-configmap.yaml
+For later application changes, use a new local tag (for example `:dev2`), build/load it, update the corresponding Deployment image, and apply that file. This avoids ambiguous cached-image behavior. A ConfigMap environment update requires applying the ConfigMap and restarting the gateway.
+
+## Cloud: DigitalOcean Kubernetes
+
+### 1. Create infrastructure and connect
+
+Create a managed Kubernetes cluster and Container Registry in DigitalOcean. Ensure the registry plan supports both image repositories. In cluster Settings, enable DigitalOcean Container Registry Integration to permit private image pulls. Install Docker, kubectl, and doctl locally. Nodes, load balancer, volumes, and registry can incur charges.
+
+Replace the example names with your own:
+
+```powershell
+doctl auth init
+doctl kubernetes cluster kubeconfig save todo-cluster
+kubectl config current-context
+kubectl get nodes
+doctl registries login todo-cluster-registry
+```
+
+Verify the context identifies DigitalOcean, not Minikube.
+
+### 2. Build and push release images
+
+Keep the application destination `http://todo:8080`. Use a new release tag each time:
+
+```powershell
+docker build -t registry.digitalocean.com/todo-cluster-registry/todo-api:v2 ./todo_API
+docker build -t registry.digitalocean.com/todo-cluster-registry/todo-gateway:v2 ./self_API_Gateway
+docker push registry.digitalocean.com/todo-cluster-registry/todo-api:v2
+docker push registry.digitalocean.com/todo-cluster-registry/todo-gateway:v2
+```
+
+Both pushes must succeed before deployment. The registry name in every command must match your actual registry.
+
+### 3. Change the Kubernetes files for cloud use
+
+In `k8s/workloads/todo-deployment.yaml`:
+
+```yaml
+image: registry.digitalocean.com/todo-cluster-registry/todo-api:v2
+imagePullPolicy: IfNotPresent
+```
+
+In `k8s/workloads/gateway-deployment.yaml`:
+
+```yaml
+image: registry.digitalocean.com/todo-cluster-registry/todo-gateway:v2
+imagePullPolicy: IfNotPresent
+```
+
+Replace `k8s/networkings/gateway-service.yaml` with:
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway
+  annotations:
+    service.beta.kubernetes.io/do-loadbalancer-type: "REGIONAL"
+    service.beta.kubernetes.io/do-loadbalancer-protocol: "http"
+spec:
+  type: LoadBalancer
+  selector:
+    app: gateway
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+```
+
+The protocol annotation controls traffic forwarding, not just health checks. HTTP forwarding supplies `X-Forwarded-For`. Keep the todo Service internal and unchanged.
+
+In both `k8s/storages/gateway-data-pvc.yaml` and `gateway-logs-pvc.yaml`, add under `spec`:
+
+```yaml
+storageClassName: do-block-storage
+```
+
+Keep `ReadWriteOnce` and the storage request. The gateway stays at one replica with `Recreate` for its current file-based data. Kubernetes automatically provisions two DigitalOcean block volumes and a load balancer when you apply the resources. Local data is not migrated automatically.
+
+In `k8s/config/gateway-configmap.yaml`, keep the route, rate policy, and `http://todo:8080` destination. Configure a verified trusted upstream network for this cluster. For the current cluster, DigitalOcean's cluster Networking panel shows node network `10.104.0.0/20`; incoming peers were IPv4-mapped IPv6 addresses, so the setting is:
+
+```yaml
+Gateway__KnownNetworks__0: "::ffff:10.104.0.0/116"
+```
+
+Do not copy that range into a different cluster without verifying it. It trusts every peer in the network, so restrict gateway access to the intended proxy path; see the client-IP section below. Keep real Secret values out of Git. The first-deployment example below leaves the admin API disabled.
+
+### 4. Apply and verify
+
+Create the Secret once (skip if it already exists):
+
+```powershell
+kubectl create secret generic gateway-admin --from-literal=api-key=""
+```
+
+Deploy:
+
+```powershell
+kubectl apply -f k8s/config/gateway-configmap.yaml -f k8s/workloads/ -f k8s/networkings/ -f k8s/storages/
+kubectl rollout status deployment/todo --timeout=300s
+kubectl rollout status deployment/gateway --timeout=300s
+kubectl get pods,pvc
+kubectl get service gateway -w
+```
+
+Wait for Pods to be ready, PVCs to show Bound, and the Service to obtain an EXTERNAL-IP. Stop watching with Ctrl+C, then replace EXTERNAL-IP in:
+
+```powershell
+curl.exe http://EXTERNAL-IP/api/todos
+.\test-rate-limit.ps1 -BaseUrl http://EXTERNAL-IP/api/todos -Requests 300
+```
+
+Public per-IP testing should show the expected client IP at the limiter, some 429 responses under a sufficiently fast burst, and a successful request after replenishment. Add a domain and HTTPS before sending sensitive traffic or admin credentials over the public endpoint.
+
+### 5. Updating an existing deployment
+
+| What changed | Required action |
+| --- | --- |
+| Gateway code or image-bundled appsettings | Build/push a new tag; update gateway Deployment image; apply Deployment; wait for rollout |
+| Todo code | Build/push a new tag; update todo Deployment image; apply Deployment; wait for rollout |
+| ConfigMap environment values, including KnownNetworks | Apply ConfigMap; restart gateway; wait for rollout |
+| Admin Secret consumed as environment variables | Update Secret securely; restart gateway |
+| Service or load-balancer annotation | Apply Service; wait for cloud reconciliation; no Deployment restart needed |
+| Bound PVC StorageClass | Plan data migration; changing the YAML alone cannot move the existing volume |
+
+For a ConfigMap update:
+
+```powershell
+kubectl apply -f k8s/config/gateway-configmap.yaml
 kubectl rollout restart deployment/gateway
 kubectl rollout status deployment/gateway
 ```
 
-Persisted admin configuration takes precedence over these startup settings; see the runtime configuration section.
+For a load-balancer protocol update:
+
+```powershell
+kubectl apply -f k8s/networkings/gateway-service.yaml
+kubectl describe service gateway
+```
+
+Check recent events and the load balancer's forwarding rules in DigitalOcean. An annotation being present only confirms the desired configuration; an unchanged public IP does not confirm update completion.
+
+A restart with `IfNotPresent` does not guarantee fetching an overwritten tag. Prefer new tags for releases. When moving between local and cloud, select the correct context and restore all file settings in the comparison table before applying; never delete PVCs as a shortcut.
+
+Official guides: [cluster connection](https://docs.digitalocean.com/products/kubernetes/how-to/connect-to-cluster/), [registry integration](https://docs.digitalocean.com/products/kubernetes/how-to/integrate-with-docr/), [load-balancer settings](https://docs.digitalocean.com/products/kubernetes/how-to/configure-load-balancers/), and [volumes](https://docs.digitalocean.com/products/kubernetes/how-to/add-volumes/).
+
+## Client IP forwarding behind cloud proxies
+
+Per-IP rate limiting uses `HttpContext.Connection.RemoteIpAddress`. Behind a cloud load balancer, that can be an internal proxy or Kubernetes node address. Requests from one client can then use several independent buckets, making a public burst appear unthrottled even though the same test through port forwarding produces 429s.
+
+Configure both sides: the upstream HTTP proxy must send the original client information, and ASP.NET Core must trust the verified upstream addresses/networks. `UseForwardedHeaders()` runs before rate limiting. Keep using RemoteIpAddress as the limiter key; do not use an unvalidated raw X-Forwarded-For header.
+
+The current ConfigMap trusts `::ffff:10.104.0.0/116`, the IPv4-mapped IPv6 representation of node network `10.104.0.0/20`. This is specific to the current deployment, not a universal cloud range. Obtain the relevant range from the cluster/network configuration and verify it matches incoming peer addresses. In this deployment, the node network is shown in the cluster's Networking panel. Other providers and proxy topologies may require different ranges or source-IP mechanisms.
+
+Trusting a node network trusts forwarded headers from every address in that network. Restrict direct gateway/NodePort access to the intended proxy path and verify how the upstream proxy handles client-supplied forwarded headers. Do not trust all private networks or disable proxy validation to make a test pass.
+
+After applying ConfigMap environment changes, restart the gateway and inspect the live admin configuration if enabled. A persisted admin record takes precedence over environment configuration. Validate through the public endpoint that RemoteIpAddress becomes the expected client address and the burst returns 429s. Forwarded Headers Middleware consumes processed XFF values, so an empty XFF after middleware can be normal. Log incoming peer/XFF before the middleware when troubleshooting, then remove per-request diagnostic warning logs.
+
+Multiple gateway replicas have independent in-memory counters. Use a shared limiter store when one allowance must cover all replicas. The two todo replicas also need a shared database if they are expected to share mutable todo data.
 
 ## Configuration
 
@@ -205,6 +440,7 @@ The implementation changes are recorded in Git; the checklist below is for verif
 
 | Commit | Change |
 | --- | --- |
+| `1698a77` | Added cloud registry images, a public HTTP LoadBalancer Service, DigitalOcean block-storage classes, the config folder/Secret template, and deployment-specific trusted network configuration |
 | `929ee34` | Connected the gateway ConfigMap, corrected the route Id key, switched Compose to one todo backend, and raised the rate-limit script's default burst to 300 |
 | `e442687` | Replaced gateway load balancing with one destination per cluster; retained health checks and enabled strict startup binding |
 | `0fc1cf3` | Added categorized Kubernetes Deployments, Services, and PVCs |
