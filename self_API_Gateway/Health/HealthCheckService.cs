@@ -1,4 +1,4 @@
-using self_API_Gateway.LoadBalancing;
+using self_API_Gateway.Backends;
 using self_API_Gateway.Routing;
 
 namespace self_API_Gateway.Health;
@@ -45,7 +45,12 @@ public sealed class HealthCheckService(
         {
             do
             {
-                await Task.WhenAll(cluster.Destinations.Select(d => ProbeAsync(cluster, d, config.Path, timeout, token)));
+                await ProbeAsync(
+                    cluster,
+                    cluster.Destination,
+                    config.Path,
+                    timeout,
+                    token);
             }
             while (await timer.WaitForNextTickAsync(token));
         }

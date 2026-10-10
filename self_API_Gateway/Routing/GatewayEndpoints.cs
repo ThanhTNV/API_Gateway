@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Routing.Patterns;
 using self_API_Gateway.Configuration;
-using self_API_Gateway.LoadBalancing;
+using self_API_Gateway.Backends;
 using self_API_Gateway.Proxy;
 using self_API_Gateway.RateLimiting;
 
@@ -47,10 +47,10 @@ public static class GatewayEndpoints
 
             RequestDelegate handler = ctx =>
             {
-                var destination = cluster.PickDestination();
+                var destination = cluster.GetHealthyDestination();
                 if (destination is null)
                 {
-                    logger.LogWarning("No healthy destination in cluster {Cluster} for route {Route}: {Method} {Path} rejected with 503",
+                    logger.LogWarning("Backend is unhealthy in cluster {Cluster} for route {Route}: {Method} {Path} rejected with 503",
                         cluster.Id, routeId, ctx.Request.Method, ctx.Request.Path);
                     ctx.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
                     return Task.CompletedTask;

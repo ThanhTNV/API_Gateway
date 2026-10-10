@@ -3,7 +3,7 @@ using System.Net.Http.Headers;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.Primitives;
 using Microsoft.Net.Http.Headers;
-using self_API_Gateway.LoadBalancing;
+using self_API_Gateway.Backends;
 
 namespace self_API_Gateway.Proxy;
 
@@ -32,8 +32,6 @@ public sealed class HttpForwarder(HttpMessageInvoker invoker, ILogger<HttpForwar
     public async Task ForwardAsync(HttpContext ctx, ClusterState cluster, DestinationState destination, PathString pathPrefix)
     {
         var aborted = ctx.RequestAborted;
-
-        destination.BeginRequest();
         try
         {
             using var request = CreateRequest(ctx, destination, pathPrefix);
@@ -96,10 +94,6 @@ public sealed class HttpForwarder(HttpMessageInvoker invoker, ILogger<HttpForwar
             {
                 ctx.Response.StatusCode = StatusCodes.Status500InternalServerError;
             }
-        }
-        finally
-        {
-            destination.EndRequest();
         }
     }
 

@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gateway-config
+data:
+  Gateway__Clusters__todo-cluster__Destination: http://todo:8080
+  Gateway__Clusters__todo-cluster__HealthCheck__Path: /health
+  Gateway__Clusters__todo-cluster__HealthCheck__IntervalSeconds: "10"
+  Gateway__Clusters__todo-cluster__HealthCheck__TimeoutSeconds: "2"
+  Gateway__Routes__0__RouteId: todo-route
+  Gateway__Routes__0__ClusterId: todo-cluster
+  Gateway__Routes__0__PathPrefix: /api/todos
+  Gateway__Routes__0__RateLimitPolicy: per-ip
+  Gateway__RateLimitPolicies__per-ip__Algorithm: "TokenBucket"
+  Gateway__RateLimitPolicies__per-ip__PartitionBy: "Ip"
+  Gateway__RateLimitPolicies__per-ip__PermitLimit: "100"
+  Gateway__RateLimitPolicies__per-ip__TokensPerPeriod: "50"
+  Gateway__RateLimitPolicies__per-ip__WindowSeconds: "1"
+  Gateway__RateLimitPolicies__per-ip__QueueLimit: "0"

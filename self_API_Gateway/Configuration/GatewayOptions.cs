@@ -25,10 +25,8 @@ public sealed class RouteConfig
 
 public sealed class ClusterConfig
 {
-    // RoundRobin | LeastRequests | PowerOfTwoChoices | Random
-    public string LoadBalancing { get; set; } = "PowerOfTwoChoices";
+    public string Destination { get; set; } = "";
     public HealthCheckConfig? HealthCheck { get; set; }
-    public List<string> Destinations { get; set; } = [];
 }
 
 public sealed class HealthCheckConfig

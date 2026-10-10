@@ -1,7 +1,7 @@
 using System.Net;
 using Microsoft.Extensions.Primitives;
 using self_API_Gateway.Configuration;
-using self_API_Gateway.LoadBalancing;
+using self_API_Gateway.Backends;
 using self_API_Gateway.Proxy;
 
 namespace self_API_Gateway.Routing;
@@ -55,7 +55,12 @@ public sealed class GatewayRuntime
         }
         else
         {
-            options = configuration.GetSection(GatewayOptions.SectionName).Get<GatewayOptions>() ?? new GatewayOptions();
+            options = configuration
+                .GetSection(GatewayOptions.SectionName)
+                .Get<GatewayOptions>(binder =>
+                {
+                    binder.ErrorOnUnknownConfiguration = true;
+                }) ?? new GatewayOptions();
         }
 
         StartupOptions = options;
