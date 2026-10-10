@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway
+spec:
+  replicas: 1
+  # Avoid overlapping gateway instances using the same data.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: gateway
+  template:
+    metadata:
+      labels:
+        app: gateway
+    spec:
+      containers:
+        - name: gateway
+          image: todo-gateway:dev
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          ports:
+            - containerPort: 8080
+          env:
+            - name: Admin__ApiKey
+              valueFrom:
+                secretKeyRef:
+                  name: gateway-admin
+                  key: api-key
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          volumeMounts:
+            - name: logs
+              mountPath: /app/logs
+            - name: data
+              mountPath: /app/data
+      volumes:
+        - name: logs
+          persistentVolumeClaim:
+            claimName: gateway-logs
+        - name: data
+          persistentVolumeClaim:
+            claimName: gateway-data
